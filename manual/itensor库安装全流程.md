@@ -18,7 +18,8 @@ sudo apt-get install libblas-dev liblapack-dev
 dpkg -L libblas-dev
 dpkg -L liblapack-dev
 ```
-若能弹出对应路径说明安装成功。
+若能弹出对应路径说明安装成功。在这里留心安装的具体路径,
+之后设置```BLAS_LAPACK_LIBFLAGS```可能会用到
 
 ---
 
@@ -54,7 +55,7 @@ BLAS_LAPACK_LIBFLAGS=-framework Accelerate
 #BLAS_LAPACK_LIBFLAGS=-lpthread -L/usr/lib -lblas -llapack
 ```
 
-取消注释。ctrl+O，ENTER保存。ctrl+X退出。
+取消注释。注意看自己的```BLAS_LAPACK_LIBFLAGS```是否需要修改.比如我的就应该是```-L/usr/lib/x86_64-linux-gnu```.ctrl+O，ENTER保存。ctrl+X退出。
 
 依然是在itensor目录下，在bash终端执行
 

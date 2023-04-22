@@ -17,7 +17,7 @@ HEADERS=myclass.h
 
 # 5. For any additional .cc (source) files making up your project,
 #    add their full filenames here.
-CCFILES=$(APP).cc
+CCFILES=$(APP).cpp
 
 #################################################################
 #################################################################
@@ -62,4 +62,3 @@ clean:
 
 mkdebugdir:
 	mkdir -p .debug_objs
-
