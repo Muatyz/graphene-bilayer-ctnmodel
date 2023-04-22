@@ -82,9 +82,12 @@ int main(){
     //printfln("H=",H);
     //PrintData(H);
 
-    ITensor Hpsi = H * psi;
-    //Hpsi.mapprime(1,0);//该语句的作用是将Hpsi中所有上标级别为1的索引全部降为0,使得之后的运算能够被允许
-    Hpsi.noPrime();
-    Real E = (dag(psi) * Hpsi).real();
+    // ITensor Hpsi = H * psi;
+    // //Hpsi.mapprime(1,0);//该语句的作用是将Hpsi中所有上标级别为1的索引全部降为0,使得之后的运算能够被允许
+    // Hpsi.noPrime();
+    // Real E = (dag(psi) * Hpsi).real();
+    // PrintData(E);
+
+    Real E = (dag(prime(psi)) * H * psi).real();
     PrintData(E);
 }

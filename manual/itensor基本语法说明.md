@@ -391,3 +391,155 @@ PrintData(E);
 ```bash
 E = -0.75
 ```
+
+当然这个过程也可以一行语句完成:
+```cpp
+Real E = (dag(prime(psi)) * H * psi).real();
+PrintData(E);
+```
+输出的结果同样是
+```bash
+E = -0.75
+```
+## Quiz $2$ 解析
+>这个题目的背景是, 使用虚时间演化的方式来找到哈密顿量所对应的基态. 对应的方程是
+>
+>$e^{-\beta H/2}|0\rangle\propto|\Psi_0\rangle$
+
+```cpp
+
+#include "itensor/all.h"
+#include "itensor/util/print_macro.h"
+
+using namespace itensor;
+
+//定义生成Sp Sm Sz的函数
+ITensor makeSp(Index const& s){
+    auto Sp = ITensor(s,prime(s));
+    Sp.set(s=2,prime(s)=1, 1);
+    return Sp;
+}
+
+ITensor makeSm(Index const& s){
+    auto Sm = ITensor(s,prime(s));
+    Sm.set(s=1,prime(s)=2,1);
+    return Sm;
+}
+
+ITensor makeSz(Index const& s){
+    auto Sz = ITensor(s,prime(s));
+    Sz.set(s=1,prime(s)=1,+0.5);
+    Sz.set(s=2,prime(s)=2,-0.5);
+    return Sz;
+}
+
+int main(){
+    // Initial product state
+    auto s1 = Index(2,"s1");auto s2 = Index(2,"s2");
+    auto psi = ITensor(s1,s2);
+    psi.set(s1=1,s2=2,1.0);
+    PrintData(psi);
+
+    // Single-site operators
+    auto Sz1 = makeSz(s1);auto Sz2 = makeSz(s2);
+    auto Sp1 = makeSp(s1);auto Sp2 = makeSp(s2);
+    auto Sm1 = makeSm(s1);auto Sm2 = makeSm(s2);
+
+    // Two-site Heisenberg Hamiltonian
+    auto H = Sz1 * Sz2 + 0.5 * Sp1 * Sm2 + 0.5 * Sm1 * Sp2;
+
+    // Initial energy expectation value
+    auto initEn = elt(dag(prime(psi)) * H * psi);
+    printfln("\nInitial energy = %.10f",initEn);
+
+    // Make exp(-beta*H)
+    // TODO
+    // 3. Adjust beta to get the ground state
+
+    Real beta = 0.1;
+    auto expH = expHermitian(H,-beta);
+
+    // Here we apply exp(-beta*H), normalize
+    // and unprime
+    auto psibeta = expH * psi;
+    psibeta.noPrime();
+    psibeta /= norm(psibeta);
+    PrintData(psibeta);
+
+    auto En = elt(dag(prime(psibeta)) * H * psibeta);
+    printfln("At beta=%.1f, energy = %.10f",beta,En);
+
+    // TODO
+    // 1. Adjust the following code to
+    //    truncate to dimension 1.
+    //    HINT: use the ITensor named argument
+    //    system, e.g. {"MaxDim=",...}
+
+    auto [U,D,V] = svd(psibeta,{s1},{"MaxDim=",1});
+    PrintData(D);
+
+    // TODO
+    // 2. Calculate the overlap of the new
+    //    wavefunction with the old wavefunction.
+    //    Print your results with PrintData(...).
+    //    HINT: use U*D*V to calculate the new,
+    //    truncated wavefunction 
+
+    auto newpsi = U * D * V;
+    PrintData(newpsi);
+    Real op = (dag(prime(newpsi)) * H * psibeta).real();
+    PrintData(op);
+
+    // TODO
+    // 3. Increase beta (defined above) to get the
+    //    ground state. How does the overlap 
+    //    change?
+
+    return 0;
+}
+```
+
+输出得到.
+
+```bash
+psi = 
+ITensor ord=2: (dim=2|id=311|"s1") (dim=2|id=239|"s2") 
+{norm=1.00 (Dense Real)}
+(1,2) 1.0000000
+
+
+Initial energy = -0.2500000000
+psibeta = 
+ITensor ord=2: (dim=2|id=311|"s1") (dim=2|id=239|"s2") 
+{norm=1.00 (Dense Real)}
+(2,1) -0.049896
+(1,2) 0.9987544
+
+At beta=0.1, energy = -0.2998339973
+D = 
+ITensor ord=2: (dim=1|id=426|"U,Link") (dim=1|id=228|"V,Link") 
+{norm=1.00 (Diag Real)}
+(1,1) 0.9987544
+
+newpsi = 
+ITensor ord=2: (dim=2|id=311|"s1") (dim=2|id=239|"s2") 
+{norm=1.00 (Dense Real)}
+(1,2) 0.9987544
+
+op = -0.274295
+```
+
+所以只要我们一直调整```beta```的取值反复编译执行, 最后就能够找到能量最低时所对应的```beta```值.
+
+# SVD 奇异值分解
+>**Singular Value Decomposition**
+>
+>如果M是 $m\times m$ 的矩阵, 那么一定存在这样一个式子:
+>
+>$M = U \Sigma V^*$
+>
+>其中$U$是 $m\times m$ 的酉矩阵, 
+$\Sigma$ 是 $m\times n$ 非负实数对焦矩阵, 
+$V^*$ 是 $n\times n$ 的酉矩阵. 
+>
+>其中 $\Sigma$ 对角线上的元素 $\Sigma_{i,i}$ 是 $M$ 的奇异值.
