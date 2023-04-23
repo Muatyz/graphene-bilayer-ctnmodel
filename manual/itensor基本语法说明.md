@@ -1311,7 +1311,11 @@ $$\hat{H}=
 \end{bmatrix}
 $$
 
-先算两边, 再算中间, 即有$\hat{H}=[-h\hat{\sigma}^{x},\hat{\sigma}^{z},\hat{I}][\hat{I},\hat{\sigma}^{z},-h\hat{\sigma}^{x}]^{T}=\sum_{j}\hat{\sigma}_{j}^{z}\hat{\sigma}_{j+1}^{z}-h\hat{\sigma}_{j}^{x}$
+先算两边, 再算中间, 即有
+
+$$
+\hat{H}=[-h\hat{\sigma}^{x},\hat{\sigma}^{z},\hat{I}][\hat{I},\hat{\sigma}^{z},-h\hat{\sigma}^{x}]^{T}=\sum_{j}\hat{\sigma}_{j}^{z}\hat{\sigma}_{j+1}^{z}-h\hat{\sigma}_{j}^{x}
+$$
 
 >本章没有对应的Quiz
 
