@@ -653,11 +653,11 @@ $$
 
 >当然我们也可以将矩阵 $A,D$ 预先相乘形成新矩阵 $\psi$, 张量网络的形式即为:
 >
->$-^{s_1} -[\#]^{A}-[\#]^{D}-[\#]^{B}-^{s_2}-$
+>$-^{s_1} -\square^{A}-\square^{D}-\square^{B}-^{s_2}-$
 >
 >$\downarrow$
 >
->$-^{s_1} -[\#\#]^{\psi}-[\#]^{B}-^{s_2}-$
+>$-^{s_1} -\square\square^{\psi}-\square^{B}-^{s_2}-$
 >
 >这样我们就得到了
 >
@@ -671,7 +671,7 @@ $$
 >
 >$\downarrow$
 >
->$-^{s_1} -\square^{A}-\square^{\psi}-^{s_2}-$
+>$-^{s_1} -\square^{A}-\square\square^{\psi}-^{s_2}-$
 >
 >这样我们就得到了
 >
@@ -1311,19 +1311,7 @@ $$\hat{H}=
 \end{bmatrix}
 $$
 
-先算两边, 再算中间:
-$$
-\hat{H}=
-\begin{bmatrix}
--h\hat{\sigma}^{x} & \hat{\sigma}^{z} & \hat{I}\\
-\end{bmatrix}
-\begin{bmatrix}
-\hat{I}\\
-\hat{\sigma}^{z} \\
--h\hat{\sigma}^{x}\\
-\end{bmatrix}=
-\sum_{j}\hat{\sigma}_{j}^{z}\hat{\sigma}_{j+1}^{z}-h\hat{\sigma}_{j}^{x}
-$$
+先算两边, 再算中间, 即有$\hat{H}=[-h\hat{\sigma}^{x},\hat{\sigma}^{z},\hat{I}][\hat{I},\hat{\sigma}^{z},-h\hat{\sigma}^{x}]^{T}=\sum_{j}\hat{\sigma}_{j}^{z}\hat{\sigma}_{j+1}^{z}-h\hat{\sigma}_{j}^{x}$
 
 >本章没有对应的Quiz
 
