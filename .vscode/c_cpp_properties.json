@@ -6,15 +6,13 @@
                 "${workspaceFolder}/**",
                 "/mnt/e/wsl/ubuntu2204/cpp/itensorCalculation/ITensor/itensor/**"
             ],
-            // 修改includePath的第二个值为itensor的安装路径
-            // 即options.mk文件所在的目录
-            // 当然也可以把这个itensor库文件夹整个复制到项目文件夹内
             "defines": [],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",
             "cppStandard": "c++17",
-            "intelliSenseMode": "clang-x64"
+            "intelliSenseMode": "clang-x64",
+            "configurationProvider": "ms-vscode.makefile-tools"
         }
     ],
     "version": 4
-   }
+}

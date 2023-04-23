@@ -625,11 +625,11 @@ $$
 
 对于一个纠缠态的双自旋系统, 我们已经知道可以处理为一个具有两个"触手"(即上标)的结点. 但是我们也可以将其作为一个矩阵来处理, 即一个拥有左右两个"触手"的结点.
 
-$-^{s_1} -[\#\#\#]^{\psi}-^{s_2}-$
+$-^{s_1} -\square\square\square^{\psi}-^{s_2}-$
 
 这样, 我们就可以对中间的结点进行SVD操作, 这样就形成了一个项链式的结构:
 
-$-^{s_1} -[\#]^{A}-[\#]^{D}-[\#]^{B}-^{s_2}-$
+$-^{s_1} -\square^{A}-\square^{D}-\square^{B}-^{s_2}-$
 
 这种波函数形式, 我们将其称之为"矩阵乘积态"(**Matrix Product State,MPS**).
 
@@ -648,7 +648,7 @@ svd(psi,A,D,B);
 我们用方程来表达矩阵乘积态的思想:
 
 $$
-\Psi\rangle=\sum_{s_1,\alpha,\alpha',s_2}A_{s_1\alpha}D_{\alpha\alpha'}B_{\alpha's_2}|s_1\rangle|s_2\rangle
+|\Psi\rangle=\sum_{s_1,\alpha,\alpha',s_2}A_{s_1\alpha}D_{\alpha\alpha'}B_{\alpha's_2}|s_1\rangle|s_2\rangle
 $$
 
 >当然我们也可以将矩阵 $A,D$ 预先相乘形成新矩阵 $\psi$, 张量网络的形式即为:
@@ -667,11 +667,11 @@ $$
 
 >同理, 我们也可以将矩阵 $D,B$ 预先相乘形成新矩阵 $\psi$, 张量积算网络的形式为
 >
->$-^{s_1} -[\#]^{A}-[\#]^{D}-[\#]^{B}-^{s_2}-$
+>$-^{s_1} -\square^{A}-\square^{D}-\square^{B}-^{s_2}-$
 >
 >$\downarrow$
 >
->$-^{s_1} -[\#]^{A}-[\#\#]^{\psi}-^{s_2}-$
+>$-^{s_1} -\square^{A}-\square^{\psi}-^{s_2}-$
 >
 >这样我们就得到了
 >
@@ -866,3 +866,473 @@ Real sz_expect = (dag(prime(psi.A(2),Site)) * sites.op("Sz",2) * psi.A(2)).real(
 >
 >和矩阵乘积态(**MPS**)相似, **MPO**也是一种张量网络的表示方法. 
 它可以用来描述复杂量子系统的哈密顿量.
+
+```cpp
+#include "itensor/all.h"
+#include "itensor/util/print_macro.h"
+
+using namespace itensor;
+using std::vector;
+
+int main(){
+    int N = 50;//定义一个包含50个1/2自旋的系统'sites'
+    auto sites = SpinHalf(N,{"ConserveQNs=",false});//"ConserveQNs="设为false,表示不考虑量子数守恒.
+
+    // TODO
+    // 3. Adjust the external field to see how the
+    //    magnetization changes
+
+    Real h = 0.5;
+    //调整h来找到相变点.h = 1 时,系统从磁性相变无序相. 
+
+    // Create the MPO for the transverse field
+    // Ising model
+    auto ampo = AutoMPO(sites); //创建一个自动构造MPO的对象'ampo'
+    //依次赋值
+    for(int j = 1; j < N; ++j){
+        ampo += -4.0,"Sz",j,"Sz",j+1;
+    }
+    for(int j = 1; j <= N; ++j){
+        ampo += -2*h,"Sx",j;
+    }
+    //哈密顿量的类型是MPO, 利用toMPO()函数将ampo里蕴含的信息转化为哈密顿量
+    auto H = toMPO(ampo);
+
+    // Create a random starting state
+    // For DMRG
+    //随机生成一个初始态
+    auto psi0 = randomMPS(sites);
+
+    // Run DMRG to get the ground state
+    auto sweeps = Sweeps(5);        //设置密度矩阵重整化群算法(DMRG)的最大迭代次数
+    sweeps.maxdim() = 5,10,20;      //设置密度矩阵重整化群算法(DMRG)的最大纠缠矩阵维度的序列
+    sweeps.cutoff() = 1E-10;        //设置奇异值的截断精度, 只有大于该值的奇异值才会被保留
+    auto [E,psi] = dmrg(H,psi0,sweeps,{"Quiet",true});
+    //H为系统的哈密顿量, 以psi0作为迭代起点运行算法,
+    //'sweeps'是迭代的参数,
+    //'{"Quiet",true}'表示静默运行(不输出详细的迭代信息)
+    //返回值为基态能量和基态波函数, 以量 E 和 psi 对计算结果进行存储
+    //在终端查看基态能量值
+    printfln("Ground state energy = ",E);
+
+    // 对psi进行共轭转置. 此时psidag上标级别为2.
+    auto psidag = dag(prime(psi));
+
+    // A vector holding the operators used
+    // in the expectation value.
+    // All set to identity operators to start.
+    // Note: this is one-indexed 
+    //       (O[n] is the operator on site n)
+    //创建长为N+1的向量, 用于存储测量算符.O[j]代表在第j个量子位上的测量算符
+    auto O = vector<ITensor>(N+1);
+    //对O进行初始化,方法是将所有的测量算符都设为单位算符
+    for(auto j : range1(N)){
+        O[j] = op(sites,"Id",j);      //"Id"意指"Identity", 即单位算符
+    }
+
+    // Position we will place our operator
+    // 将本征位置选为正中, 即N/2.以这个位置来执行测量
+    int Npos = N/2;
+
+    // TODO
+    // 1. Add an operator to measure the magnetization
+    //    in the z direction at Npos.
+    //    HINT: use the op(...) function.
+    //          It provides spin operators "Sx", "Sy", "Sz",
+    //          you may want to scale your operator
+    //          to make it a Pauli matrix
+    auto op_z = 2.0 * op(sites,"Sz",Npos);
+    O[Npos] = op_z;
+
+    // TODO
+    // 2. Complete the following code 
+    //    to measure the magnetization.
+    //    Print your results with PrintData(...)
+
+    auto o = psidag(1) * O[1] * psi(1);
+    for(auto j : range1(2,N)){
+        o *= psidag(j) * O[j] * psi(j);
+    }
+    PrintData(o);
+
+    // TODO
+    // 3. Adjust the transverse field h at the top of the
+    //    file to find the critical point.
+    //    HINT: think about the field limits h -> 0
+    //          and h -> infinity
+    return 0;
+}
+```
+编译执行后终端输出：
+```bash
+vN Entropy at center bond b=25 = 0.002062540436
+    Eigs at center bond b=25: 0.9998 
+    Largest link dim during sweep 1/5 was 4
+    Largest truncation error: 4.11222e-11
+    Energy after sweep 1/5 is -51.205898332822
+    Sweep 1/5 CPU time = 0.0146s (Wall time = 0.0177s)
+
+    vN Entropy at center bond b=25 = 0.006828488484
+    Eigs at center bond b=25: 0.9992 
+    Largest link dim during sweep 2/5 was 10
+    Largest truncation error: 1.88078e-08
+    Energy after sweep 2/5 is -51.298393038956
+    Sweep 2/5 CPU time = 0.0181s (Wall time = 0.0181s)
+
+    vN Entropy at center bond b=25 = 0.002920154202
+    Eigs at center bond b=25: 0.9997 
+    Largest link dim during sweep 3/5 was 18
+    Largest truncation error: 9.69913e-11
+    Energy after sweep 3/5 is -52.306536772989
+    Sweep 3/5 CPU time = 0.0210s (Wall time = 0.0210s)
+
+    vN Entropy at center bond b=25 = 0.002920148259
+    Eigs at center bond b=25: 0.9997 
+    Largest link dim during sweep 4/5 was 6
+    Largest truncation error: 9.45633e-11
+    Energy after sweep 4/5 is -52.306549436787
+    Sweep 4/5 CPU time = 0.0179s (Wall time = 0.0180s)
+
+    vN Entropy at center bond b=25 = 0.002920145615
+    Eigs at center bond b=25: 0.9997 
+    Largest link dim during sweep 5/5 was 5
+    Largest truncation error: 9.18628e-11
+    Energy after sweep 5/5 is -52.306549436806
+    Sweep 5/5 CPU time = 0.0168s (Wall time = 0.0168s)
+Ground state energy = -52.3065
+o = 
+ITensor ord=0: 
+{norm=0.96 (Dense Real)}
+  -0.964679
+```
+
+# ~~"小车"~~ Trotter – Suzuki formula
+
+上一章中我们测量的是单个量子位的期望值, 当我们增加有效算子(指在该量子位上并非单位算符```"Id"```)的数量, 张量网络看上去就如同小车一般.
+
+>~~上述语句均为强行解释~~.事实上这个算法来源于模拟哈密顿量动力学中的**Trotter – Suzuki formula**, **Trotter**到底是形容"小车"还是人名实际上并不太清楚.
+
+现在我们设想一个已经对于相邻的两个量子位的左/右都已经完成左/右规范化,那么现在要做的就是计算这两个相邻量子位上对应算符的期望值.
+
+和前面章节中处理二量子位的纠缠态类似, 我们可以将这两个量子位进行合并, 进行SVD分解, 再重组(至于是```AD```组合还是```DB```组合,可以根据自己需求来调整).
+
+>注意: 这种算法仅适用于相邻量子位并不属于同一方向规范的情况(比如并不是两个正则位置, 而是在正则位置的同一边), 否则以截断SVD方法计算得到的结果并非全局最优.
+
+Trotter算法的精髓在于,将哈密顿量(也就是我们所用的算子)分解为若干个可以独立演化的小块, 而且如果哈密顿量是短程相互作用, 那么这种分解的效果就更好. 对于长程作用的哈密顿量Trotter算法的效率就会明显降低.在上面我们所举的例子里, 有效的哈密顿量仅涉及两个相邻的量子位, 可以说是符合短程的定义.
+
+如果哈密顿量中的相互作用都是短程的, 我们可以将哈密顿量分解为小块, 用自旋系统为例, 我们可以用这样的方程来描述:
+
+$$
+\begin{aligned}
+\hat{H}&=\hat{H}_1+\hat{H}_2+\hat{H}_3+\dots \\
+
+&=\sum_{j}\hat{S}_{j}\cdot\hat{S}_{j+1} \\
+
+&=(\hat{S}_{1}\cdot\hat{S}_{2})+(\hat{S}_{2}\cdot\hat{S}_{3})+(\hat{S}_{3}\cdot\hat{S}_{4})\dots
+\end{aligned}
+$$
+
+那么假设系统演化了一极短的虚时间 $\tau$,我们可以将系统的演化写作:
+
+$$
+\begin{aligned}
+e^{-\tau\hat{H}}\approxeq &e^{-\tau\hat{H}_1/2}e^{-\tau\hat{H}_2/2}e^{-\tau\hat{H}_3/2}\dots\\
+&\dots e^{-\tau\hat{H}_3/2}e^{-\tau\hat{H}_2/2}e^{-\tau\hat{H}_1/2}+O(\tau^3)
+\end{aligned}
+$$
+
+>**虚时演化**
+>
+>对于一个一般的表达式 $|\psi'\rangle=e^{-\tau\hat{H}}|\psi\rangle$ (省略了 $\hbar$ ),有两种情况:
+>- $\tau$ 是实数, 那么相当于 $\tau = i\tau'$, 其中 $\tau'$是虚时间. 那么我们只要执行足够多步, 就可以搜索到基态.
+>- $\tau$ 是虚数, 那么就是一般的**动力学**表述, 相当于 $\tau = it$, 原方程变为 $|\psi'\rangle=e^{-it\hat{H}}|\psi\rangle$
+>
+>对于第一种情况, 有一种应用的例子, 即通过取 $\beta/2=1/(2T)$ 的虚时演化来模拟有限温度.
+>
+>更详细的说, 就是取 $\tau = \frac{1}{k_BT}$ ,就相当于进行了一次虚时间演化. 在每一步执行完成后我们要对系统的状态进行记录, 从而对系统的在温度T下的性质进行统计平均.
+
+我们用.gif来演示这一过程:
+
+<center><img src="gif/trotter.gif" width = "400" height = ""></center>
+
+因为我们每一步都只取了每个量子位对应分块哈密顿量的 $\frac{1}{2}$ ,所以通过往返执行一遍可以不改变纠缠态的规范性.
+
+
+# Quiz 5 解析
+```cpp
+#include "itensor/all.h"
+#include "itensor/util/print_macro.h"
+
+using std::vector;
+using std::move;
+using namespace itensor;
+
+struct TGate{
+    int i1 = 0;int i2 = 0;
+    //i1, i2是用来指定虚时演化算子中产生作用的两个自旋量子位编号
+    ITensor G;
+    //G被声明为ITensor类型，用来存储具体的虚时演化算子值
+
+    TGate() { }
+    TGate(int i1_, int i2_, ITensor G_) 
+        : i1(i1_), i2(i2_), G(G_) { }
+};
+
+int main(){
+    int N = 20;
+    auto sites = SpinHalf(N);//声明系统是20个1/2自旋子的系统
+
+    auto init = InitState(sites);
+    for(auto n : range1(N)){
+        init.set(n, n%2 == 1 ? "Up" : "Dn");
+    }//并且将该系统初始化为Neel态(相邻自旋总相反)
+    //将该状态init通过MPS()转译为矩阵乘积态(MPS)的形式
+    auto psi = MPS(init);
+    //定义虚时演化的总时间和时间间隔(步长)
+    Real ttotal = 2;Real tstep = 0.1;
+    //检查时间步长和总时间是否合法
+    auto nt = int(ttotal/tstep+(1e-9*(ttotal/tstep)));
+    if(std::fabs(nt*tstep-ttotal) > 1E-9){
+        Error("Timestep not commensurate with total time");
+    }
+
+    //Create Trotter gates (imaginary time)
+    //定义数据类型为TGate的vector容器，用来存储虚时演化算子
+    auto gates = vector<TGate>{};
+
+    for(int b = 1; b < N; ++b){
+        //从头开始构建哈密顿量
+        auto hh = op(sites,"Sz",b)*op(sites,"Sz",b+1);
+        hh += 0.5*op(sites,"Sp",b)*op(sites,"Sm",b+1);
+        hh += 0.5*op(sites,"Sm",b)*op(sites,"Sp",b+1);
+        //计算半步长的虚时演化算子
+        auto G = expHermitian(hh,-tstep/2.);
+        //将虚时演化算子存储到名为gates的容器中(序列尾部)
+        //b在每个循环中都有一个值. 下面的b和b+1是指应用算子的位置.
+        gates.emplace_back(b,b+1,move(G));
+    }
+    for(int b = N-1; b >= 1; --b){
+        //从尾开始构建哈密顿量
+        ITensor hh = op(sites,"Sz",b)*op(sites,"Sz",b+1);
+        hh += 0.5*op(sites,"Sp",b)*op(sites,"Sm",b+1);
+        hh += 0.5*op(sites,"Sm",b)*op(sites,"Sp",b+1);
+        //计算半步长的虚时演化算子
+        auto G = expHermitian(hh,-tstep/2.);
+        //将虚时演化算子存储到名为gates的容器中(序列尾部)
+        //b在每个循环中都有一个值. 下面的b和b+1是指应用算子的位置.
+        gates.emplace_back(b,b+1,move(G));
+    }
+    
+
+    for(int step = 1; step <= nt; ++step){
+        //将之前计算存储好的分块算子一一取出
+        for(auto& gate : gates){
+            //读取分块算子对应的作用位置
+            auto b = gate.i1;
+            //读取分块算子的具体值
+            auto& G = gate.G;
+            //设置正则位置为当前循环中的b
+            psi.position(b);
+            //将相邻量子位b和b+1合成为新张量AA
+            auto AA = psi(b) * psi(b+1);
+
+            // TODO: ADD CODE here that applies 
+            // the gate G to the MPS bond
+            // tensor "AA" by multiplying
+            // G and AA using the * operator
+            // G is an ITensor
+            // with index structure:
+            //   s_{b}' s_{b+1}'
+            //    |      |
+            //    ========
+            //    |      |
+            //   s_{b}  s_{b+1}
+            // After applying G to AA, don't forget
+            // to reset the prime level to 0 by using
+            // the noPrime method.
+            //将G和AA相乘
+            AA *= G;
+            AA.noPrime();//将AA的上标级别降为0, 因为SVD操作要求上标级别是一致的
+            //Normalize AA after applying G
+            AA /= norm(AA);
+
+            //SVD AA to restore MPS form
+            auto [U,D,V] = svd(AA,inds(psi(b)),{"Cutoff",1E-10});
+            psi.set(b,U);
+            psi.set(b+1,D*V);
+        }
+        printfln("Step %d/%d",step,nt);
+    }
+
+    //Make Heisenberg H to
+    //conveniently measure energy
+    auto ampo = AutoMPO(sites);
+    for(auto j : range1(N-1)){
+        ampo += 0.5,"S+",j,"S-",j+1;
+        ampo += 0.5,"S-",j,"S+",j+1;
+        ampo +=     "Sz",j,"Sz",j+1;
+    }
+    auto H = toMPO(ampo);
+
+    printfln("Energy = %.20f",inner(psi,H,psi));
+    // Exact ground state energy of N=20
+    // Heisenberg model:E0 = -8.6824733306
+    return 0;
+}
+```
+编译执行后, 在终端输出的结果:
+```bash
+Step 1/20
+Step 2/20
+Step 3/20
+Step 4/20
+Step 5/20
+Step 6/20
+Step 7/20
+Step 8/20
+Step 9/20
+Step 10/20
+Step 11/20
+Step 12/20
+Step 13/20
+Step 14/20
+Step 15/20
+Step 16/20
+Step 17/20
+Step 18/20
+Step 19/20
+Step 20/20
+Energy = -8.51422469470028886462
+```
+最后的结果和理论上计算得到的 $-8.6824733306$ 相差约为 $1.94\%$, 可以说差距不大.
+
+#  矩阵乘积算子 **MPO**
+
+我们已经知道, 在张量网络中, 一个哈密顿量 $\hat{H}$ 看上去大概是这个样子:
+
+$$
+\sum^{|}_{|}\sum^{|}_{|}\sum^{|}_{|}\sum^{|}_{|}\sum^{|}_{|}
+$$
+
+而一个对应量子位数的纠缠态波函数 $|\Psi\rangle$ 则是这样:
+
+$$
+\sum^{|}-\sum^{|}-\sum^{|}-\sum^{|}-\sum^{|}
+$$
+
+在上面的学习中我们已经知道, 要让 $\hat{H}$ 作用到 $|\Psi\rangle$ 上, 其实就是将上下标进行结合的过程.
+
+那么既然 $|\Psi\rangle$ 能够写作矩阵乘积的形式, 我们自然也可以对 $\hat{H}$ 进行同样的要求,将其化为张量网络中的这种形式:
+
+$$
+\sum^{|}_{|}-\sum^{|}_{|}-\sum^{|}_{|}-\sum^{|}_{|}-\sum^{|}_{|}
+$$
+
+我们取其中一个张量进行分析:
+
+$$
+^{1}-\sum^{|^{3}}_{|_{4}}-^{2}
+$$
+
+这里面的$1$和$2$代表的时张量左右的指标, 而$3$和$4$代表的是张量上下的指标(通常和作用与某量子位或其它物理量有关). 多个这样的张量乘在一起就能化成矩阵乘积算子的形式.
+
+我们不妨用一个更具体的例子:
+
+$$\hat{H} = 
+\begin{bmatrix}
+0 & 1\\
+\end{bmatrix}_{A}
+\begin{bmatrix}
+\hat{I} & \\
+\hat{\sigma}^{z} & \hat{I}\\
+\end{bmatrix}_{B}
+\begin{bmatrix}
+\hat{I} & \\
+\hat{\sigma}^{z} & \hat{I}\\
+\end{bmatrix}_{C}
+\begin{bmatrix}
+1 \\
+0\\
+\end{bmatrix}_{D}
+$$
+
+在矩阵的右下角使用```A``` ```B``` ```C``` ```D```来进行标记.它们以张量网络画出的形式大概像这样:
+
+$$
+\sum{A}-\sum_{|}^{|}{B}-\sum_{|}^{|}{C}-\sum{D}
+$$
+
+不难看出实际上```A```和```B```,以及```C```和```D```是能够各自结合形成新矩阵的, 我们写出相乘得到的结果:
+
+$$
+\hat{H} =
+\begin{bmatrix}
+\hat{\sigma}^{z} & \hat{I}\\
+\end{bmatrix}_{A'} 
+\begin{bmatrix}
+\hat{I}\\
+\hat{\sigma}^{z} \\
+\end{bmatrix}_{B'}
+$$
+
+在方程上我们这样表述:
+
+$$
+\hat{H} = \hat{\sigma}_{1}^{z}\bigotimes\hat{I}_{2} + \hat{I}_{1}\bigotimes\hat{\sigma}^{z}_{2}
+$$
+
+当然这一个式子我们还可以进行继续的简化, 完成最后一步的乘法: 
+
+$$
+\hat{H} = \hat{\sigma}^{z}_{1}+\hat{\sigma}^{z}_{2}
+=\sum_{i}\hat{\sigma}^{z}_{i}
+$$
+
+现在再动手算更复杂的例子.
+
+$$\hat{H}=
+\begin{bmatrix}
+0 & 0 & 1\\
+\end{bmatrix}
+\begin{bmatrix}
+\hat{I} &  & \\
+\hat{\sigma}^{z} &  & \\
+-h\hat{\sigma}^{x} & \hat{\sigma}^{z} & \hat{I}\\
+\end{bmatrix}
+\begin{bmatrix}
+\hat{I} &  & \\
+\hat{\sigma}^{z} &  & \\
+-h\hat{\sigma}^{x} & \hat{\sigma}^{z} & \hat{I}\\
+\end{bmatrix}
+\begin{bmatrix}
+1\\
+0\\
+0\\
+\end{bmatrix}
+$$
+
+先算两边, 再算中间:
+$$
+\hat{H}=
+\begin{bmatrix}
+-h\hat{\sigma}^{x} & \hat{\sigma}^{z} & \hat{I}\\
+\end{bmatrix}
+\begin{bmatrix}
+\hat{I}\\
+\hat{\sigma}^{z} \\
+-h\hat{\sigma}^{x}\\
+\end{bmatrix}=
+\sum_{j}\hat{\sigma}_{j}^{z}\hat{\sigma}_{j+1}^{z}-h\hat{\sigma}_{j}^{x}
+$$
+
+>本章没有对应的Quiz
+
+# **DMRG** 密度矩阵重整化群
+
+如果我们想要求解一维哈密顿量的基态, **DMRG** 将是最好的方法. 
+
+方程式的形式如下:
+
+$\hat{H}|\Psi\rangle = E|\Psi\rangle$
+
+其中 $\hat{H}$ 和 $|\Psi\rangle$ 都化为对应量子位数的 矩阵乘积形式(```MPO``` 和 ```MPS```).
